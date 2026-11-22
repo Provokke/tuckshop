@@ -36,7 +36,8 @@ export type Result = "PurchaseGranted" | "NotProcessedYet"
 
 export type Deps = {
 	getSession: (userId: number) -> any?, -- the live session (with .data and :save()), or nil; may yield
-	products: { [number]: (session: any) -> boolean }, -- grant functions, by product id
+	-- grant functions, by product id: true, or false and a reason when the grant is refused
+	products: { [number]: (session: any) -> (boolean, string?) },
 	memory: number, -- how many PurchaseIds to remember (Config.ReceiptMemory)
 	clock: () -> number,
 	log: (message: string) -> (),
@@ -113,13 +114,20 @@ function Receipts.process(self: Receipts, receipt: Receipt): Result
 			return "NotProcessedYet" -- another call is granting this one; Roblox will ask again
 		end
 		self.granting[flight] = true
-		local ok, granted = pcall(grant, session)
+		local ok, granted, reason = pcall(grant, session)
 		self.granting[flight] = nil
 		if not ok then
 			deps.log(`grant for product {receipt.ProductId} failed for {userId}: {tostring(granted)}`)
 			return "NotProcessedYet"
 		end
 		if granted ~= true then
+			-- Roblox will keep asking, and a refusal (a balance at its cap, say) may never clear,
+			-- so say enough to find the purchase and refund it by hand.
+			deps.log(
+				`grant for product {receipt.ProductId} refused for {userId} in receipt {purchaseId}: {tostring(
+					reason
+				)}. It stays unprocessed; refund it by hand if this keeps happening.`
+			)
 			return "NotProcessedYet"
 		end
 		-- The grant may have yielded, and the session may have been lost or replaced meanwhile.

@@ -215,10 +215,10 @@ handlers = Handlers.new({
 -- Developer products. Each product id in Config.Products grants an amount of a currency. Id 0 is
 -- a placeholder that no real purchase uses. The grant credits the session's wallet; Receipts
 -- records the PurchaseId and saves before telling Roblox it is done.
-local products: { [number]: (session: any) -> boolean } = {}
+local products: { [number]: (session: any) -> (boolean, string?) } = {}
 for productId, def in Config.Products do
-	products[productId] = function(session: any): boolean
-		local ok = Ledger.apply(
+	products[productId] = function(session: any): (boolean, string?)
+		return Ledger.apply(
 			session.data.wallet,
 			def.grant,
 			def.amount,
@@ -226,7 +226,6 @@ for productId, def in Config.Products do
 			os.time(),
 			Config.LogLength
 		)
-		return ok
 	end
 end
 

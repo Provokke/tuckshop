@@ -235,6 +235,22 @@ return {
 		end,
 	},
 	{
+		name = "a grant that is refused is logged with its product, player and purchase id",
+		run = function()
+			local r = rig()
+			r.grantWorks = false
+			assert(r.receipts:process(receipt("p-9", 200)) == WAIT)
+			assert(#r.logs == 1, `{#r.logs} log lines`)
+			local line = r.logs[1]
+			for _, part in { "p-9", "200", "1" } do
+				assert(string.find(line, part, 1, true) ~= nil, line)
+			end
+			-- control: a grant that works logs nothing
+			r.grantWorks = true
+			assert(r.receipts:process(receipt("p-10", 200)) == GRANTED and #r.logs == 1)
+		end,
+	},
+	{
 		name = "with a memory of 3, only the 3 newest ids remain after 5 receipts",
 		run = function()
 			local r = rig(3)

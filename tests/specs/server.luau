@@ -188,4 +188,32 @@ return {
 			assert(#world.errors == 1, "and nothing else went wrong")
 		end,
 	},
+	{
+		name = "a product grant the ledger refuses is not processed, and is logged with its purchase id",
+		run = function()
+			local world = started()
+			world.records.Player_1 = {
+				schema = 1,
+				savedAt = 0,
+				data = {
+					wallet = { balances = { Coins = 0, Gems = 2 ^ 53 - 50 }, log = {} },
+					bought = {},
+					owned = {},
+					receipts = {},
+				},
+			}
+			world:join(1)
+			local box = world:receipt(1, GEMS_PRODUCT, "p-big")
+			assert(box.result == WAIT, tostring(box.result))
+			assert(stored(world, 1).receipts["p-big"] == nil, "nothing recorded")
+			local logged = false
+			for _, line in world.warnings do
+				if string.find(line, "p-big", 1, true) and string.find(line, "overflow", 1, true) then
+					logged = true
+				end
+			end
+			assert(logged, "logged with the purchase id and the reason, so it can be refunded by hand")
+			assert(#world.errors == 0, world.errors[1])
+		end,
+	},
 }
