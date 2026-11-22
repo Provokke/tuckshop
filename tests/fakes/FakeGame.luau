@@ -67,13 +67,11 @@ local function signal(world: any): any
 			end,
 		}
 	end
-	-- Each handler runs in its own thread, as Roblox does.
+	-- Each handler runs in its own thread, as Roblox does, and an error in one is logged rather
+	-- than raised in whoever fired the signal.
 	function s.fire(self: any, ...: any)
-		local args = table.pack(...)
 		for _, fn in table.clone(self.fns) do
-			world.sched:spawn(function()
-				fn(table.unpack(args, 1, args.n))
-			end)
+			world:spawnLogged(fn, ...)
 		end
 	end
 	return s
@@ -111,6 +109,18 @@ function FakeGame.new(options: Options?): any
 	world.clock = FakeClock.new(opts.start or 0)
 	world.sched = FakeScheduler.new(world.clock)
 	world.ds = FakeDataStore.new(world.records)
+	world.errors = {} -- errors thrown in spawned threads and signal handlers, which Roblox only logs
+
+	-- Runs fn(...) in a new thread on the scheduler, logging an error instead of raising it.
+	function world.spawnLogged(self: any, fn: (...any) -> (), ...: any)
+		local args = table.pack(...)
+		self.sched:spawn(function()
+			local ok, err = pcall(fn, table.unpack(args, 1, args.n))
+			if not ok then
+				table.insert(self.errors, tostring(err))
+			end
+		end)
+	end
 
 	local Players: any
 	Players = strict("Players", {
@@ -265,10 +275,7 @@ function FakeGame.new(options: Options?): any
 					world.sched:spawn(fn)
 					return
 				end
-				local args = table.pack(...)
-				world.sched:spawn(function()
-					fn(table.unpack(args, 1, args.n))
-				end)
+				world:spawnLogged(fn, ...)
 			end,
 			wait = function(seconds: number?): number
 				world.sched:wait(seconds or 0)

@@ -56,6 +56,7 @@ return {
 			local granted = good:receipt(1, GEMS_PRODUCT, "p-1")
 			assert(granted.result == GRANTED, tostring(granted.result))
 			assert(stored(good, 1).wallet.balances.Gems == 100 and stored(good, 1).receipts["p-1"] ~= nil)
+			assert(#good.errors == 0 and #world.errors == 0, good.errors[1] or world.errors[1])
 		end,
 	},
 	{
@@ -92,6 +93,7 @@ return {
 			-- control: a player who isn't on this server is answered at once
 			local other = world:receipt(2, GEMS_PRODUCT, "p-2")
 			assert(other.result == WAIT and stored(world, 2) == nil)
+			assert(#world.errors == 0, world.errors[1])
 		end,
 	},
 	{
@@ -113,6 +115,7 @@ return {
 			assert(again.attributes.Owns_tuck_basket == 2 and world.players[1] == again)
 			world:leave(1)
 			assert(stored(world, 1).owned.tuck_basket == 2 and stored(world, 1).wallet.balances.Coins == 40)
+			assert(#world.errors == 0, world.errors[1])
 		end,
 	},
 	{
@@ -140,6 +143,7 @@ return {
 			world.sched:advance(3)
 			world:touch(pad, 1)
 			assert(coins() == 140, `{coins()} after a confirmed purchase`)
+			assert(#world.errors == 0, world.errors[1])
 		end,
 	},
 	{
@@ -159,6 +163,29 @@ return {
 			world:touch(pad, 1)
 			assert(world.synced[#world.synced].payload.balances.Coins == 130, "doubled after the retry")
 			assert(#world.passChecks == 2, `{#world.passChecks} checks`)
+			assert(#world.errors == 0, world.errors[1])
+		end,
+	},
+	{
+		name = "a Sync that fails after a receipt has been saved doesn't change the answer",
+		run = function()
+			local world = started()
+			world:join(1)
+			world.fireThrows = true -- the push to the client fails
+			local box = world:receipt(1, GEMS_PRODUCT, "p-1")
+			assert(box.error == nil, box.error)
+			assert(box.result == GRANTED, tostring(box.result))
+			assert(stored(world, 1).wallet.balances.Gems == 100 and stored(world, 1).receipts["p-1"] ~= nil)
+			assert(
+				#world.errors == 1 and string.find(world.errors[1], "FireClient", 1, true),
+				world.errors[1]
+			)
+			-- control: with the push working, the client is sent the new balance
+			world.fireThrows = false
+			local sent = #world.synced
+			assert(world:receipt(1, GEMS_PRODUCT, "p-2").result == GRANTED)
+			assert(#world.synced == sent + 1 and world.synced[#world.synced].payload.balances.Gems == 200)
+			assert(#world.errors == 1, "and nothing else went wrong")
 		end,
 	},
 }

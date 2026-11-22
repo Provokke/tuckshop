@@ -261,7 +261,11 @@ MarketplaceService.ProcessReceipt = function(info: { [string]: any }): Enum.Prod
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	if result == "PurchaseGranted" then
-		handlers:push(info.PlayerId)
+		-- The purchase is saved, so nothing after this may change the answer. The Sync goes out in
+		-- its own thread, where an error in it can't become an error from this callback.
+		task.spawn(function()
+			handlers:push(info.PlayerId)
+		end)
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
 	return Enum.ProductPurchaseDecision.NotProcessedYet
