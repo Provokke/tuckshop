@@ -2,7 +2,7 @@
 
 # tuckshop
 
-Currencies, a rotating shop and idempotent developer-product receipts for Roblox. It leaves out item art, inventories and any gameplay that uses what a player buys. Player data is saved with a session lease, the same store as [satchel](https://github.com/Provokke/satchel).
+Currencies, a rotating shop and idempotent developer-product receipts for Roblox. It leaves out item art and any gameplay that uses what a player buys: a bought item is kept as a count in the player's saved data and shown as an attribute on the player. Player data is saved with a session lease, the same store as [satchel](https://github.com/Provokke/satchel).
 
 ![License](https://img.shields.io/badge/LICENSE-MIT-blue?style=for-the-badge)  ![Language](https://img.shields.io/badge/LUAU-00A2FF?style=for-the-badge&logo=roblox&logoColor=white)  ![Tests](https://img.shields.io/badge/TESTS-137-brightgreen?style=for-the-badge)
 
@@ -17,7 +17,7 @@ Refer to [LICENSE](LICENSE) for the legal bits.
 - **Session-locked data.** Each load claims the player's record with a lease belonging to that one session, so two servers can't both write it. Saves build their payload inside the `UpdateAsync` transform and queue per session, so an older save can't overwrite a newer one. A release keeps retrying through an outage. Records saved by a newer version of the game load read-only: the player can look at the shop but can't buy, be credited or have a receipt processed on that server.
 - **A ledger with whole numbers only.** Every change to a balance goes through one function that refuses a non-integer, an unknown currency, an overdraw and an overflow, leaves the balance alone when it refuses, and logs the rest (the newest 25 entries by default).
 - **A rotating shop that every server agrees on.** The listing is worked out from the wall clock: items marked `always` are always listed, and each pool lists its configured number of items, picked without replacement with a small seeded generator written in the module, so the same time gives the same shop on every server and in the tests.
-- **Purchases the client can't price.** The server reads the price from the catalogue. A purchase checks the item is listed now, checks the per-window limit, then debits. If handing the item over fails, the charge is refunded and the log shows both.
+- **Purchases the client can't price, saved with what they bought.** The server reads the price from the catalogue. A purchase checks the item is listed now, checks the per-window limit, then debits. The charge, the per-window allowance and the item itself (a count in the player's data) are written together with no yield between them, so the next save carries all three or none, and the items are given back to the player on every load. If handing the item over fails, all three are put back and the log shows the debit and the refund.
 - **Game passes and a coin pad.** Pass ownership is cached per player, a failed check counts as not owned and is retried on the next refresh, and a finished purchase counts straight away. The `DoubleCoins` perk doubles the demo coin pad's reward and nothing else.
 - **Server authority.** Clients send intent only (`buy` with an item id, or `listing`). Every call is checked for type and range, rate limited per player and then checked against the rules. A refused call is dropped and counted, and nothing is sent back about why.
 
@@ -39,7 +39,7 @@ GamePasses = table.freeze({
                                    v
  init.server.luau  ------->  Sessions  ---->  Store  ---->  Lease (claim / refresh / release)
  (services, remotes,                            |    ---->  Migrations + Steps
-  ProcessReceipt)                               |    ---->  Profile (wallet, bought, receipts)
+  ProcessReceipt)                               |    ---->  Profile (wallet, bought, owned, receipts)
         |                                       v
         |                                  DataStore  (MemoryStore in Studio)
         |
@@ -117,7 +117,7 @@ The entry scripts and the UI can't run under Lune. They build with Rojo and are 
 - A grant that returns false must have changed nothing. A grant that changes data and then fails would be changed again on the retry.
 - Receipts only count as granted once the data is saved. If the server crashes after granting but before the save, the player's stored data has no grant, and the retry grants it once more from the stored copy. That is the point of the order, but it means a grant that has effects outside the player's data (a message, a Robux gift) can happen twice.
 - Balances are whole numbers only, and a balance is capped at 2^53 - 1.
-- The demo hands over a bought item by counting it as an attribute on the player. That isn't saved. A real game replaces `itemGranted` in the server script with its own hand-over. Purchases per window are saved, but items are not.
+- A bought item is a count in the player's data (`owned`), saved with its charge. The demo shows it as an `Owns_<itemId>` attribute on the player and nothing in the demo uses it. A game puts its own hand-over (a Tool, a cosmetic) in `itemGranted` and in the restore on load, both in the server script.
 - If the DataStore stays down for longer than the lease (3 minutes by default) after a player leaves, the release gives up and what they did since the last successful save is lost. Until the release lands or the lease runs out, a rejoin on another server is turned away with "rejoin in a minute".
 - During a rolling update, a player whose record was saved by the newer version can look at the shop on an older server, but can't buy, earn from the coin pad or have a receipt processed there. Roblox retries the receipt on a server that can.
 - In Studio the demo uses an in-memory store unless the `TuckshopUseDataStore` attribute is set, so it proves the flow but not real DataStore behaviour such as throttling. The Lune fake does model re-runs, interleaved calls and calls that fail after writing. What the request budget reads in Studio with the real store and no API access hasn't been checked.

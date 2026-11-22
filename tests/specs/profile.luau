@@ -20,6 +20,7 @@ return {
 			local data = profile().defaultData()
 			assert(data.wallet.balances.Coins == 100 and data.wallet.balances.Gems == 0)
 			assert(next(data.bought) == nil and next(data.receipts) == nil)
+			assert(type(data.owned) == "table" and next(data.owned) == nil, "nothing owned yet")
 			-- control: two new profiles never share a table
 			local other = profile().defaultData()
 			other.wallet.balances.Coins = 1
@@ -72,6 +73,13 @@ return {
 			-- a record missing the optional fields gets them filled in
 			local out = p.decode({ wallet = { balances = { Coins = 3 } } })
 			assert(out.wallet.balances.Coins == 3 and next(out.bought) == nil and next(out.receipts) == nil)
+			assert(
+				type(out.owned) == "table" and next(out.owned) == nil,
+				"a record from before owned existed"
+			)
+			-- and items already owned are kept
+			local kept = p.decode({ wallet = { balances = {} }, owned = { cape_skin = 1 } })
+			assert(kept.owned.cape_skin == 1)
 			assert(#out.wallet.log == 0)
 		end,
 	},

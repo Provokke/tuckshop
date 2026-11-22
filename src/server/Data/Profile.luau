@@ -4,6 +4,7 @@
 --
 --   wallet   { balances, log }                   the Ledger's wallet
 --   bought   { [itemId] = { window, count } }    purchases in the current rotation window
+--   owned    { [itemId] = count }                 shop items handed over, saved with their charge
 --   receipts { [PurchaseId] = time }             developer-product purchases already granted
 --
 -- Every field is plain data with string keys and dense arrays, so the stored form is the session
@@ -39,7 +40,7 @@ function Profile.new(deps: Deps): Profile
 	-- writes them. A player who leaves (or a server that crashes) before the first save still
 	-- has them next time, and they are never granted twice.
 	local function defaultData(): Data
-		return { wallet = deps.newWallet(), bought = {}, receipts = {} }
+		return { wallet = deps.newWallet(), bought = {}, owned = {}, receipts = {} }
 	end
 
 	-- Session form to stored form. Runs inside UpdateAsync transforms, so it must not yield.
@@ -69,6 +70,9 @@ function Profile.new(deps: Deps): Profile
 		end
 		if type(out.bought) ~= "table" then
 			out.bought = {}
+		end
+		if type(out.owned) ~= "table" then
+			out.owned = {}
 		end
 		if type(out.receipts) ~= "table" then
 			out.receipts = {}

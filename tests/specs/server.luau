@@ -94,4 +94,25 @@ return {
 			assert(other.result == WAIT and stored(world, 2) == nil)
 		end,
 	},
+	{
+		name = "an item bought with Coins is saved with the charge and is still owned after a rejoin",
+		run = function()
+			local world = started()
+			local player = world:join(1)
+			world:request(1, "buy", "tuck_basket") -- 30 Coins, always listed
+			assert(player.attributes.Owns_tuck_basket == 1, "handed over")
+			world:leave(1)
+			local data = stored(world, 1)
+			assert(data.wallet.balances.Coins == 70, `Coins {data.wallet.balances.Coins}`)
+			assert(data.bought.tuck_basket.count == 1)
+			assert(data.owned ~= nil and data.owned.tuck_basket == 1, "the item was saved with the charge")
+			local again = world:join(1)
+			assert(again ~= player and again.attributes.Owns_tuck_basket == 1, "and is restored on load")
+			-- control: a second purchase counts on from what was restored
+			world:request(1, "buy", "tuck_basket")
+			assert(again.attributes.Owns_tuck_basket == 2 and world.players[1] == again)
+			world:leave(1)
+			assert(stored(world, 1).owned.tuck_basket == 2 and stored(world, 1).wallet.balances.Coins == 40)
+		end,
+	},
 }

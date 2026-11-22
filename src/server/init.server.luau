@@ -140,7 +140,14 @@ sessions = Sessions.new({
 	playerOf = function(userId: number): any
 		return Players:GetPlayerByUserId(userId)
 	end,
-	ready = function(userId: number, _session: any)
+	ready = function(userId: number, session: any)
+		-- Items bought before are in the saved data; show them on the player again.
+		local player = Players:GetPlayerByUserId(userId)
+		if player ~= nil then
+			for itemId, count in session.data.owned do
+				player:SetAttribute("Owns_" .. itemId, count)
+			end
+		end
 		handlers:push(userId)
 		task.spawn(function()
 			passes:refresh(userId)
@@ -157,16 +164,16 @@ sessions = Sessions.new({
 	log = log,
 })
 
-local function itemGranted(userId: number, itemId: string): (boolean, string?)
-	-- The demo hands an item over by counting it on the player. A real game would give a Tool,
-	-- unlock a cosmetic or write to its own data here. Return false to have the charge refunded.
+local function itemGranted(userId: number, itemId: string, count: number): (boolean, string?)
+	-- Shop has already written the item to the player's data (data.owned, saved with the charge),
+	-- and `count` is how many they now own. The demo shows that as an Owns_<itemId> attribute on
+	-- the player, which `ready` sets again on every load. A game would give a Tool or unlock a
+	-- cosmetic here. Return false to have the charge, the allowance and the item taken back.
 	local player = Players:GetPlayerByUserId(userId)
 	if player == nil then
 		return false, "left"
 	end
-	local attribute = "Owns_" .. itemId
-	local count = player:GetAttribute(attribute)
-	player:SetAttribute(attribute, (if type(count) == "number" then count else 0) + 1)
+	player:SetAttribute("Owns_" .. itemId, count)
 	return true, nil
 end
 

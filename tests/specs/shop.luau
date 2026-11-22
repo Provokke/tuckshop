@@ -23,7 +23,7 @@ local currencies = { Coins = { start = 100 }, Gems = { start = 0 } }
 
 local function setup(coins: number?)
 	local w: any = { now = 0, grants = {}, grantResult = true }
-	w.data = { wallet = Ledger.new(currencies), bought = {}, receipts = {} }
+	w.data = { wallet = Ledger.new(currencies), bought = {}, owned = {}, receipts = {} }
 	if coins ~= nil then
 		w.data.wallet.balances.Coins = coins
 	end
@@ -36,8 +36,8 @@ local function setup(coins: number?)
 			return w.now
 		end,
 		logLength = 25,
-		grant = function(key: any, itemId: string)
-			table.insert(w.grants, `{key}:{itemId}`)
+		grant = function(key: any, itemId: string, count: number)
+			table.insert(w.grants, `{key}:{itemId}:{count}`)
 			if w.grantResult == true then
 				return true, nil
 			end
@@ -55,8 +55,9 @@ return {
 			local ok, err = w.shop:purchase(7, w.data, "shield_skin")
 			assert(ok == true and err == nil, tostring(err))
 			assert(w.data.wallet.balances.Coins == 250, "debited 250")
-			assert(#w.grants == 1 and w.grants[1] == "7:shield_skin")
+			assert(#w.grants == 1 and w.grants[1] == "7:shield_skin:1", w.grants[1])
 			assert(w.data.bought.shield_skin.count == 1 and w.data.bought.shield_skin.window == 0)
+			assert(w.data.owned.shield_skin == 1, "the item is kept in the same data as the charge")
 			assert(w.data.wallet.log[1].reason == "buy:shield_skin" and w.data.wallet.log[1].delta == -250)
 		end,
 	},
@@ -123,9 +124,11 @@ return {
 			assert(log[1].delta == -400 and log[1].reason == "buy:cape_skin")
 			assert(log[2].delta == 400 and log[2].reason == "refund:cape_skin")
 			assert(w.data.bought.cape_skin == nil, "and the limit isn't used up")
+			assert(w.data.owned.cape_skin == nil, "and the item isn't kept")
 			-- control: with the grant working again, the same purchase goes through
 			w.grantResult = true
 			assert(w.shop:purchase(7, w.data, "cape_skin") == true and w.data.wallet.balances.Coins == 100)
+			assert(w.data.owned.cape_skin == 1)
 		end,
 	},
 	{
@@ -167,6 +170,23 @@ return {
 			w2.shop.deps.catalogue = pricey
 			assert(w2.shop:purchase(7, w2.data, "shield_skin") == true)
 			assert(w2.data.wallet.balances.Coins == 700)
+		end,
+	},
+	{
+		name = "each item bought is counted in the player's data, and a failed hand-over takes back only its own",
+		run = function()
+			local w = setup(1000)
+			assert(w.shop:purchase(7, w.data, "night_lantern") == true)
+			assert(w.shop:purchase(7, w.data, "night_lantern") == true)
+			assert(w.data.owned.night_lantern == 2 and w.grants[2] == "7:night_lantern:2", w.grants[2])
+			w.grantResult = false
+			assert(w.shop:purchase(7, w.data, "night_lantern") == false)
+			assert(w.data.owned.night_lantern == 2, "the two already handed over are kept")
+			assert(w.data.wallet.balances.Coins == 760, "and only their price was taken")
+			-- control: the third goes through once the hand-over works
+			w.grantResult = true
+			assert(w.shop:purchase(7, w.data, "night_lantern") == true and w.data.owned.night_lantern == 3)
+			assert(w.data.wallet.balances.Coins == 640)
 		end,
 	},
 }

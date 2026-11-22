@@ -30,6 +30,7 @@ local function setup(): any
 			data = {
 				wallet = { balances = { Coins = 1000, Gems = 0 }, log = {} },
 				bought = {},
+				owned = {},
 				receipts = {},
 			},
 		},
@@ -38,6 +39,7 @@ local function setup(): any
 			data = {
 				wallet = { balances = { Coins = 1000, Gems = 0 }, log = {} },
 				bought = {},
+				owned = {},
 				receipts = {},
 			},
 		},
