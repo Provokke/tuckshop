@@ -1,10 +1,20 @@
 --!strict
 -- Tuckshop server entry. This is where services, remotes and the DataStore are touched. The rules
 -- themselves live in the modules next to it and are covered by the Lune tests.
+
+-- First, before anything that can yield or fail: a ProcessReceipt callback that leaves every
+-- purchase for later. With no callback at all, Roblox acknowledges receipts on its own and the
+-- Robux are taken with nothing granted. If start-up stops early (a config problem, a module that
+-- fails to load), this one stays in place and Roblox keeps the receipts until a server can grant
+-- them. Once everything is built, it is replaced by the real handler further down.
+local MarketplaceService = game:GetService("MarketplaceService")
+MarketplaceService.ProcessReceipt = function(_info: { [string]: any }): Enum.ProductPurchaseDecision
+	return Enum.ProductPurchaseDecision.NotProcessedYet
+end
+
 local CollectionService = game:GetService("CollectionService")
 local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
-local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -35,7 +45,7 @@ if #problems > 0 then
 	for _, problem in problems do
 		warn("[Tuckshop] config problem: " .. problem)
 	end
-	warn("[Tuckshop] not starting until the config is fixed")
+	warn("[Tuckshop] not starting until the config is fixed. Purchases are left for Roblox to retry.")
 	return
 end
 
@@ -220,8 +230,9 @@ local receipts = Receipts.new({
 	log = log,
 })
 
--- The one place ProcessReceipt is assigned. It is only ever assigned here, once; assigning it
--- again anywhere else would replace this handler and strand every purchase.
+-- The real handler, replacing the holding one assigned at the top of this script. Nothing else
+-- may assign ProcessReceipt: a second assignment anywhere would replace this handler and strand
+-- every purchase.
 MarketplaceService.ProcessReceipt = function(info: { [string]: any }): Enum.ProductPurchaseDecision
 	local ok, result = pcall(function(): string
 		return receipts:process({
