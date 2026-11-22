@@ -15,7 +15,10 @@
 	3. The PurchaseId is not yet in session.data.receipts: run the grant. If it errors (pcall) or
 	   returns false: NotProcessedYet with nothing recorded. On success, record
 	   receipts[PurchaseId] = now, and trim the oldest entries past `memory`. The grant and the
-	   record happen with no yield between them, so a second call can't slip in between.
+	   record happen with no yield between them, so a second call can't slip in between. An id
+	   is never trimmed until a save that carries it has landed (this session remembers which of
+	   its ids haven't), so a receipt still waiting for its retry can't be forgotten and granted
+	   again. Until then the list can run over `memory`.
 	4. Recorded (now or on an earlier try): call session:save(). Return PurchaseGranted only if
 	   save returns true, which means the write landed with this session's lease. Otherwise
 	   NotProcessedYet. A retry then finds the id recorded and only saves again, so the grant never
@@ -39,16 +42,26 @@ export type Deps = {
 	log: (message: string) -> (),
 }
 
-export type Receipts = typeof(setmetatable({} :: { deps: Deps, granting: { [string]: boolean } }, Receipts))
+export type Receipts = typeof(setmetatable(
+	{} :: {
+		deps: Deps,
+		granting: { [string]: boolean },
+		-- by session: ids recorded in its data that no landed save has carried yet
+		unsaved: { [any]: { [string]: boolean } },
+	},
+	Receipts
+))
 
 function Receipts.new(deps: Deps): Receipts
-	return setmetatable({ deps = deps, granting = {} }, Receipts)
+	-- Weak keys: a session that has been released and dropped takes its entry with it.
+	local unsaved = setmetatable({}, { __mode = "k" }) :: any
+	return setmetatable({ deps = deps, granting = {}, unsaved = unsaved }, Receipts)
 end
 
--- Drops the oldest ids until at most `memory` remain. The id just recorded is never dropped.
--- Entries with the same time are dropped in id order, which only matters when more than `memory`
--- purchases land in one second.
-local function trim(receipts: { [string]: number }, memory: number, keep: string)
+-- Drops the oldest ids until at most `memory` remain, skipping any id in `keep` (recorded, not
+-- yet saved; the id just recorded is always one of them). Entries with the same time are dropped
+-- in id order, which only matters when more than `memory` purchases land in one second.
+local function trim(receipts: { [string]: number }, memory: number, keep: { [string]: boolean })
 	local ids: { string } = {}
 	for id in receipts do
 		table.insert(ids, id)
@@ -67,7 +80,7 @@ local function trim(receipts: { [string]: number }, memory: number, keep: string
 		if excess == 0 then
 			break
 		end
-		if id ~= keep then
+		if not keep[id] then
 			receipts[id] = nil
 			excess -= 1
 		end
@@ -112,7 +125,13 @@ function Receipts.process(self: Receipts, receipt: Receipt): Result
 		-- The grant may have yielded, and the session may have been lost or replaced meanwhile.
 		-- Record against the session that was granted to, and let the save say whether it landed.
 		receipts[purchaseId] = deps.clock()
-		trim(receipts, deps.memory, purchaseId)
+		local unsaved = self.unsaved[session]
+		if unsaved == nil then
+			unsaved = {}
+			self.unsaved[session] = unsaved
+		end
+		unsaved[purchaseId] = true
+		trim(receipts, deps.memory, unsaved)
 	end
 
 	local saved, result = pcall(function(): boolean
@@ -123,6 +142,11 @@ function Receipts.process(self: Receipts, receipt: Receipt): Result
 		return "NotProcessedYet"
 	end
 	if result == true then
+		-- This save was built after the id was recorded, so the id is in the store now.
+		local unsaved = self.unsaved[session]
+		if unsaved ~= nil then
+			unsaved[purchaseId] = nil
+		end
 		return "PurchaseGranted"
 	end
 	return "NotProcessedYet"

@@ -278,6 +278,37 @@ return {
 		end,
 	},
 	{
+		name = "an id whose save hasn't landed is never trimmed, so its retry doesn't grant again",
+		run = function()
+			local r = rig(3)
+			r.now = 1
+			r.session.saveWorks = false
+			assert(r.receipts:process(receipt("p-1")) == WAIT, "granted and recorded, but not saved")
+			r.session.saveWorks = true
+			for i = 2, 4 do
+				r.now = i
+				assert(r.receipts:process(receipt("p-" .. i)) == GRANTED)
+			end
+			assert(r.session.data.receipts["p-1"] ~= nil, "the unsaved id is kept past the memory")
+			assert(r.session.data.receipts["p-2"] == nil, "the oldest saved one went instead")
+			r.now = 5
+			assert(r.receipts:process(receipt("p-1")) == GRANTED, "Roblox asks again")
+			assert(
+				r.grants == 4 and r.session.data.wallet.balances.Gems == 400,
+				`{r.grants} grants for 4 purchases`
+			)
+			-- control: once its save has landed, p-1 is trimmed like any other id
+			r.now = 6
+			assert(r.receipts:process(receipt("p-5")) == GRANTED)
+			local kept = {}
+			for id in r.session.data.receipts do
+				table.insert(kept, id)
+			end
+			table.sort(kept)
+			assert(table.concat(kept, ",") == "p-3,p-4,p-5", table.concat(kept, ","))
+		end,
+	},
+	{
 		name = "a retry on another server after a failed save and a release is granted without granting again",
 		run = function()
 			local w = twoServers()
