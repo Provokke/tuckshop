@@ -76,4 +76,22 @@ return {
 			assert(world:receipt(1, GEMS_PRODUCT, "p-1").result == GRANTED, "the real callback replaced it")
 		end,
 	},
+	{
+		name = "a receipt that arrives while the player's data is still loading is granted once it loads",
+		run = function()
+			local world = started()
+			world.ds:hookNext(function()
+				world.sched:wait(5) -- the claim made by the join is slow
+			end)
+			world:join(1)
+			local box = world:receipt(1, GEMS_PRODUCT, "p-1")
+			assert(box.result == nil, "waiting for the load")
+			world.sched:advance(6)
+			assert(box.result == GRANTED, tostring(box.result or box.error))
+			assert(stored(world, 1).wallet.balances.Gems == 100 and stored(world, 1).receipts["p-1"] ~= nil)
+			-- control: a player who isn't on this server is answered at once
+			local other = world:receipt(2, GEMS_PRODUCT, "p-2")
+			assert(other.result == WAIT and stored(world, 2) == nil)
+		end,
+	},
 }

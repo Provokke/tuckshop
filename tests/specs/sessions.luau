@@ -5,6 +5,7 @@
 local FakeClock = require("../fakes/FakeClock")
 local FakeScheduler = require("../fakes/FakeScheduler")
 local Profile = require("../../src/server/Data/Profile")
+local Receipts = require("../../src/server/Shop/Receipts")
 local Sessions = require("../../src/server/Sessions")
 local StoreServer = require("../fakes/StoreServer")
 
@@ -81,6 +82,38 @@ local function parkNextCall(w: any, seconds: number)
 	w.ds:hookNext(function()
 		w.sched:wait(seconds)
 	end)
+end
+
+-- Receipts over this server's sessions, the way the entry script wires them: the lookup waits up
+-- to 30 s for a session that is still loading. The product credits 100 Gems and counts itself.
+local function receiptsFor(w: any): any
+	w.grants = 0
+	return Receipts.new({
+		getSession = function(userId: number)
+			return w.sessions:waitForSession(userId, 30)
+		end,
+		products = {
+			[100] = function(session: any): boolean
+				w.grants += 1
+				session.data.wallet.balances.Gems += 100
+				return true
+			end,
+		},
+		memory = 200,
+		clock = function()
+			return w.clock:now()
+		end,
+		log = function() end,
+	})
+end
+
+local function processLater(w: any, receipts: any, purchaseId: string): any
+	local box: any = {}
+	w.sched:spawn(function()
+		box.result = receipts:process({ PlayerId = 1, ProductId = 100, PurchaseId = purchaseId })
+		box.at = w.clock:now()
+	end)
+	return box
 end
 
 local function oldBag(schema: number): any
@@ -255,6 +288,63 @@ return {
 			w2.sessions:get(1).data.wallet.balances.Coins = 55
 			depart(w2, 1)
 			assert(w2.records.Player_1.data.wallet.balances.Coins == 55)
+		end,
+	},
+	{
+		name = "a receipt that arrives while the player's data is loading waits for the load and is granted",
+		run = function()
+			local w = world()
+			parkNextCall(w, 5) -- the load's claim is slow
+			arrive(w, 1, "a")
+			local receipts = receiptsFor(w)
+			local box = processLater(w, receipts, "p-1")
+			assert(box.result == nil and w.grants == 0, "it waits rather than answering")
+			w.sched:advance(6)
+			assert(box.result == "PurchaseGranted", tostring(box.result))
+			assert(w.grants == 1, `granted {w.grants} times`)
+			local stored = w.records.Player_1.data
+			assert(stored.wallet.balances.Gems == 100 and stored.receipts["p-1"] ~= nil, "saved with its id")
+			-- a player with a session already loaded is answered at once
+			local again = processLater(w, receipts, "p-2")
+			assert(again.result == "PurchaseGranted" and w.grants == 2)
+		end,
+	},
+	{
+		name = "a receipt for a player who leaves mid-load, or whose load never lands, is not processed",
+		run = function()
+			local w = world()
+			parkNextCall(w, 5)
+			arrive(w, 1, "a")
+			local receipts = receiptsFor(w)
+			local box = processLater(w, receipts, "p-1")
+			w.sched:advance(1)
+			depart(w, 1)
+			w.sched:advance(1)
+			assert(box.result == "NotProcessedYet" and box.at < 2, `{box.result} at {box.at}`)
+			w.sched:advance(10) -- the parked load lands for nobody and is handed back
+			assert(w.grants == 0 and w.records.Player_1.lease == nil)
+			assert(
+				w.records.Player_1.data.wallet.balances.Gems == 0
+					and next(w.records.Player_1.data.receipts) == nil
+			)
+			-- a load that stays parked longer than the wait: answered after 30 s, nothing granted
+			local w2 = world()
+			parkNextCall(w2, 100)
+			arrive(w2, 1, "a")
+			local slow = processLater(w2, receiptsFor(w2), "p-1")
+			w2.sched:advance(29)
+			assert(slow.result == nil, "still waiting at 29 s")
+			w2.sched:advance(2)
+			assert(
+				slow.result == "NotProcessedYet" and slow.at >= 30 and slow.at < 30.5,
+				`{slow.result} {slow.at}`
+			)
+			assert(w2.grants == 0)
+			-- and a read-only session is answered at once, without waiting
+			local w3 = world({ Player_1 = oldBag(9) })
+			arrive(w3, 1, "a")
+			local readOnly = processLater(w3, receiptsFor(w3), "p-1")
+			assert(readOnly.result == "NotProcessedYet" and readOnly.at == 0 and w3.grants == 0)
 		end,
 	},
 }

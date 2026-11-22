@@ -8,7 +8,9 @@
 	The rules:
 	1. No live session for the player: NotProcessedYet. Roblox retries later, possibly on another
 	   server. A session that is read-only (saved by a newer version of the game) or that has lost
-	   its lease counts as no session, because nothing it did would be saved.
+	   its lease counts as no session, because nothing it did would be saved. getSession may yield
+	   to wait for a session that is still loading, so a receipt that arrives as the player joins
+	   is granted once their data is in rather than left for their next purchase.
 	2. Unknown product: log it and return NotProcessedYet. Never grant a guess.
 	3. The PurchaseId is not yet in session.data.receipts: run the grant. If it errors (pcall) or
 	   returns false: NotProcessedYet with nothing recorded. On success, record
@@ -30,7 +32,7 @@ export type Receipt = { PlayerId: number, ProductId: number, PurchaseId: string 
 export type Result = "PurchaseGranted" | "NotProcessedYet"
 
 export type Deps = {
-	getSession: (userId: number) -> any?, -- the live session (with .data and :save()), nil if not loaded
+	getSession: (userId: number) -> any?, -- the live session (with .data and :save()), or nil; may yield
 	products: { [number]: (session: any) -> boolean }, -- grant functions, by product id
 	memory: number, -- how many PurchaseIds to remember (Config.ReceiptMemory)
 	clock: () -> number,

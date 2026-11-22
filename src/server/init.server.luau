@@ -220,9 +220,14 @@ for productId, def in Config.Products do
 	end
 end
 
+-- A receipt can arrive while the player's data is still loading. It waits for the load (up to this
+-- long) rather than answering NotProcessedYet, which Roblox would only retry at their next purchase
+-- or rejoin. A ProcessReceipt callback may yield.
+local RECEIPT_WAIT_SECONDS = 30
+
 local receipts = Receipts.new({
 	getSession = function(userId: number): any
-		return sessions:writableSession(userId)
+		return sessions:waitForSession(userId, RECEIPT_WAIT_SECONDS)
 	end,
 	products = products,
 	memory = Config.ReceiptMemory,

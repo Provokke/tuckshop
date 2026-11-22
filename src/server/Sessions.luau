@@ -143,6 +143,24 @@ function Sessions.writableSession(self: Sessions, userId: number): any
 	return nil
 end
 
+-- The same as writableSession, but while the player is still here and has no live session yet
+-- (their load is running, or waiting out the release of a session they just left), it waits for
+-- one, polling for at most `timeout` seconds. Receipts use this: Roblox can call ProcessReceipt as
+-- a player joins, before their data has loaded, and a NotProcessedYet then waits for their next
+-- purchase or rejoin, because Roblox doesn't retry on a timer. Yields.
+function Sessions.waitForSession(self: Sessions, userId: number, timeout: number): any
+	local deps = self.deps
+	local deadline = deps.clock() + timeout
+	while self.live[userId] == nil and not self.closing and deps.clock() < deadline do
+		local player = deps.playerOf(userId)
+		if player == nil or not deps.present(player) then
+			break
+		end
+		deps.wait(POLL_SECONDS)
+	end
+	return self:writableSession(userId)
+end
+
 -- Whether anything this player's session does would be saved. False for a session that loaded
 -- read-only (saved by a newer version of the game) or that has lost its lease. Such a session
 -- must not spend, be credited or process receipts.
