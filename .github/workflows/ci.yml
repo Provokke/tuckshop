@@ -11,3 +11,4 @@ jobs:
       - run: selene src
       - run: cd tests && selene .
       - run: lune run tests/run
+      - run: mkdir -p build && rojo build -o build/tuckshop.rbxl

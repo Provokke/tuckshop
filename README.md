@@ -4,7 +4,7 @@
 
 Currencies, a rotating shop and idempotent developer-product receipts for Roblox. It leaves out item art and any gameplay that uses what a player buys: a bought item is kept as a count in the player's saved data and shown as an attribute on the player. Player data is saved with a session lease, the same store as [satchel](https://github.com/Provokke/satchel).
 
-![License](https://img.shields.io/badge/LICENSE-MIT-blue?style=for-the-badge)  ![Language](https://img.shields.io/badge/LUAU-00A2FF?style=for-the-badge&logo=roblox&logoColor=white)  ![Tests](https://img.shields.io/badge/TESTS-156-brightgreen?style=for-the-badge)
+![Licence](https://img.shields.io/badge/LICENSE-MIT-blue?style=for-the-badge)  ![Language](https://img.shields.io/badge/LUAU-00A2FF?style=for-the-badge&logo=roblox&logoColor=white)  ![Tests](https://img.shields.io/badge/TESTS-156-brightgreen?style=for-the-badge)
 
 Refer to [LICENSE](LICENSE) for the legal bits.
 
@@ -14,7 +14,7 @@ Refer to [LICENSE](LICENSE) for the legal bits.
 
 ## What's in it
 
-- **Receipts that never grant twice and never lose a paid grant.** A developer-product purchase is granted, its `PurchaseId` is recorded in the player's data, and then the data is saved. Roblox is only told `PurchaseGranted` once that save has landed with this session's lease. If the save fails, the answer is `NotProcessedYet`, and the retry finds the id already recorded and only saves again. A retry on another server after the player's data was released reads the recorded id and doesn't grant again. A receipt that arrives as the player joins waits (up to 30 seconds) for their data to load instead of being turned away.
+- **Receipts that are granted once and saved before Roblox is told.** A developer-product purchase is granted, its `PurchaseId` is recorded in the player's data, and then the data is saved. Roblox is only told `PurchaseGranted` once that save has landed with this session's lease. If the save fails, the answer is `NotProcessedYet`, and the retry finds the id already recorded and only saves again. A retry on another server after the player's data was released reads the recorded id and doesn't grant again. A receipt that arrives as the player joins waits (up to 30 seconds) for their data to load instead of being turned away. The limits below say exactly where that stops holding.
 - **Grants fail safely.** A grant that errors or returns false records nothing and answers `NotProcessedYet`, and a refused one is logged with its purchase id so it can be refunded by hand. An unknown product, a player with no session, and a session that is read-only or has lost its lease all answer `NotProcessedYet` too, so nothing is ever granted on a guess or into data that won't be saved. Two calls for the same new `PurchaseId` at once grant once. The server script assigns a holding `ProcessReceipt` before anything else, so a start-up that stops early (a config problem, a module that fails to load) leaves purchases for Roblox to retry rather than letting them be acknowledged with nothing granted.
 - **Session-locked data.** Each load claims the player's record with a lease belonging to that one session, so two servers can't both write it. Saves build their payload inside the `UpdateAsync` transform and queue per session, so an older save can't overwrite a newer one. A release keeps retrying through an outage. Records saved by a newer version of the game load read-only: the player can look at the shop but can't buy, be credited or have a receipt processed on that server.
 - **A ledger with whole numbers only.** Every change to a balance goes through one function that refuses a non-integer, an unknown currency, an overdraw and an overflow, leaves the balance alone when it refuses, and logs the rest (the newest 25 entries by default).
@@ -24,7 +24,7 @@ Refer to [LICENSE](LICENSE) for the legal bits.
 - **Server authority.** Clients send intent only (`buy` with an item id, or `listing`). Every call is checked for type and range, rate limited per player and then checked against the rules. A refused call is dropped and counted, and nothing is sent back about why.
 
 ```lua
--- src/shared/Config.luau
+-- src/shared/Config.luau (replace the placeholder 0 ids with your own)
 Products = table.freeze({
 	[1234567890] = table.freeze({ grant = "Gems", amount = 100 }), -- your developer product id
 }),
@@ -84,6 +84,8 @@ GamePasses = table.freeze({
 rokit install
 rojo serve
 ```
+
+Or open `demo/tuckshop.rbxl` and press Play.
 
 Start from an empty baseplate, connect the Rojo plugin and press Play. Add a part, give it the tag `TuckshopCoinPad` and stand on it: you get 10 Coins each time, at most once every 3 seconds. Press the Shop button at the bottom left to open the shop. The Featured tab lists everything in stock, Skins and Boosts filter it, and the countdown shows when the stock changes. Choosing an item asks you to confirm and shows what you will have left. Without a coin pad part the server warns once and carries on.
 
