@@ -10,6 +10,8 @@ Refer to [LICENSE](LICENSE) for the legal bits.
 
 </div>
 
+![Opening the shop, buying a Tuckshop Basket for 30 Coins and the balance counting down from 100 to 70](docs/media/buy.gif)
+
 ## What's in it
 
 - **Receipts that never grant twice and never lose a paid grant.** A developer-product purchase is granted, its `PurchaseId` is recorded in the player's data, and then the data is saved. Roblox is only told `PurchaseGranted` once that save has landed with this session's lease. If the save fails, the answer is `NotProcessedYet`, and the retry finds the id already recorded and only saves again. A retry on another server after the player's data was released reads the recorded id and doesn't grant again. A receipt that arrives as the player joins waits (up to 30 seconds) for their data to load instead of being turned away.
@@ -30,6 +32,16 @@ GamePasses = table.freeze({
 	[987654321] = table.freeze({ perk = "DoubleCoins" }), -- your game pass id
 }),
 ```
+
+## 🎮 Demo place
+
+`demo/tuckshop.rbxl` is a ready-made place: a kiosk and a coin pad on a paved square. Open it in Studio and press Play, then use the Shop button, or stand on the coin pad to earn Coins. Every shot here comes from a Studio play test of that place.
+
+| The square | Confirming a purchase |
+|---|---|
+| ![The kiosk and the coin pad](docs/media/kiosk.jpg) | ![The confirm prompt for a Tuckshop Basket](docs/media/confirm.jpg) |
+| **After buying** | **The coin pad** |
+| ![The shop after the purchase, 70 Coins left](docs/media/bought.jpg) | ![Standing on the coin pad, the balance going up](docs/media/coin-pad.jpg) |
 
 ## 🏗️ Architecture
 
