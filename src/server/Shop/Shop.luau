@@ -56,6 +56,11 @@ function Shop.purchase(self: Shop, key: any, data: any, itemId: string): (boolea
 
 	local window = deps.rotation.window(now, deps.rotationConfig.WindowSeconds)
 	local record = data.bought[itemId]
+	if record ~= nil and record.window > window then
+		-- Saved by a server whose clock is ahead of this one. Overwriting it with this earlier
+		-- window would hand out that window's allowance a second time.
+		return false, "limit"
+	end
 	local count = if record ~= nil and record.window == window then record.count else 0
 	if item.limitPerWindow ~= nil and count >= item.limitPerWindow then
 		return false, "limit"

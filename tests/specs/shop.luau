@@ -189,4 +189,28 @@ return {
 			assert(w.data.wallet.balances.Coins == 640)
 		end,
 	},
+	{
+		name = "a server whose clock is behind can't reset an allowance used up in a later window",
+		run = function()
+			local w = setup(1000)
+			w.now = 3601 -- window 1
+			for _ = 1, 5 do
+				assert(w.shop:purchase(7, w.data, "tuck_basket") == true)
+			end
+			assert(w.shop:purchase(7, w.data, "tuck_basket") == false, "limit 5 reached")
+			w.now = 3599 -- the player hops to a server two seconds behind: window 0
+			local ok, err = w.shop:purchase(7, w.data, "tuck_basket")
+			assert(ok == false and err == "limit", tostring(err))
+			assert(
+				w.data.bought.tuck_basket.window == 1 and w.data.bought.tuck_basket.count == 5,
+				"record kept"
+			)
+			assert(w.data.wallet.balances.Coins == 850 and #w.grants == 5, "nothing charged or handed over")
+			-- control: the next window along gives a fresh allowance
+			w.now = 7200
+			assert(w.shop:purchase(7, w.data, "tuck_basket") == true)
+			assert(w.data.bought.tuck_basket.window == 2 and w.data.bought.tuck_basket.count == 1)
+			assert(w.data.wallet.balances.Coins == 820)
+		end,
+	},
 }
