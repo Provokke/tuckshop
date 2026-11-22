@@ -75,4 +75,12 @@ return {
 			assert(#out.wallet.log == 0)
 		end,
 	},
+	{
+		name = "a currency added after the record was saved starts at its starting balance",
+		run = function()
+			local out = profile().decode({ wallet = { balances = { Coins = 3 }, log = {} } })
+			assert(out.wallet.balances.Coins == 3, "an existing balance is never reset")
+			assert(out.wallet.balances.Gems == 0, "the new currency exists, so it can be credited")
+		end,
+	},
 }

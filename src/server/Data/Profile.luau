@@ -61,6 +61,12 @@ function Profile.new(deps: Deps): Profile
 		if type(out.wallet.log) ~= "table" then
 			out.wallet.log = {}
 		end
+		-- A currency added to the config since this record was saved starts at its starting balance.
+		for name, start in deps.newWallet().balances do
+			if out.wallet.balances[name] == nil then
+				out.wallet.balances[name] = start
+			end
+		end
 		if type(out.bought) ~= "table" then
 			out.bought = {}
 		end
