@@ -82,8 +82,11 @@ local function twoServers(): any
 		})
 		local s: any = { store = store, ds = ds }
 		s.receipts = Receipts.new({
-			getSession = function()
-				return s.session
+			getSession = function(userId: number)
+				if userId == 1 then
+					return s.session -- p1, the only player on these servers
+				end
+				return nil
 			end,
 			products = {
 				[100] = function(session: any): boolean
@@ -349,6 +352,9 @@ return {
 			-- control: a new purchase on server 2 does grant
 			assert(w.two.receipts:process(receipt("pur-2")) == GRANTED)
 			assert(w.grants == 2 and w.records.p1.data.wallet.balances.Gems == 200)
+			-- and a receipt for a player who isn't on server 2 is not put on p1's data
+			assert(w.two.receipts:process(receipt("pur-3", 100, 2)) == WAIT)
+			assert(w.grants == 2 and w.records.p1.data.receipts["pur-3"] == nil)
 		end,
 	},
 	{
@@ -371,6 +377,96 @@ return {
 			-- server 1's old session can no longer write over it
 			assert(w.one.session:save() == false)
 			assert(w.records.p1.data.wallet.balances.Gems == 100)
+		end,
+	},
+	{
+		name = "a save that lands and then errors is retried as a save only, and granted once",
+		run = function()
+			local w = twoServers()
+			w.one.session = w.one.store:load("p1")
+			assert(w.one.session ~= nil)
+			w.one.ds:commitThenFailNext(1, "timed out")
+			assert(w.one.receipts:process(receipt("pur-1")) == WAIT, "the save threw, so not granted yet")
+			assert(w.records.p1.data.receipts["pur-1"] ~= nil, "although the write had landed")
+			assert(w.records.p1.data.wallet.balances.Gems == 100)
+			assert(w.one.receipts:process(receipt("pur-1")) == GRANTED, "Roblox asks again")
+			assert(w.grants == 1 and w.records.p1.data.wallet.balances.Gems == 100, "still one grant")
+			-- control: a save that simply works is granted at the first answer
+			assert(w.one.receipts:process(receipt("pur-2")) == GRANTED)
+			assert(w.grants == 2 and w.records.p1.data.wallet.balances.Gems == 200)
+		end,
+	},
+	{
+		name = "a receipt behind a parked autosave, or with the player leaving, is stored before it is granted",
+		run = function()
+			local clock = FakeClock.new(0)
+			local sched = FakeScheduler.new(clock)
+			local records: any = {}
+			local profile = Profile.new({ newWallet = newWallet })
+			local store, ds = StoreServer.new(records, clock, "JOB", {
+				wait = function(seconds: number)
+					sched:wait(seconds)
+				end,
+				resume = function(thread: thread)
+					sched:spawn(thread)
+				end,
+				defaultData = profile.defaultData,
+				encode = profile.encode,
+				decode = profile.decode,
+			})
+			local session = store:load("p1")
+			local grants = 0
+			local receipts = Receipts.new({
+				getSession = function()
+					return session
+				end,
+				products = {
+					[100] = function(s: any): boolean
+						grants += 1
+						s.data.wallet.balances.Gems += 100
+						return true
+					end,
+				},
+				memory = 200,
+				clock = function()
+					return clock:now()
+				end,
+				log = function() end,
+			})
+			ds:hookNext(function()
+				sched:wait(5) -- the autosave built its payload before the grant, then stalled
+			end)
+			local autosaved: boolean? = nil
+			sched:spawn(function()
+				autosaved = session:save()
+			end)
+			local result: string? = nil
+			sched:spawn(function()
+				result = receipts:process(receipt("pur-1"))
+			end)
+			assert(result == nil and grants == 1, "granted in memory, its save queued")
+			assert(records.p1.data.receipts["pur-1"] == nil)
+			sched:advance(6)
+			assert(autosaved == true and result == GRANTED, tostring(result))
+			assert(records.p1.data.receipts["pur-1"] ~= nil and records.p1.data.wallet.balances.Gems == 100)
+			-- the player leaves while a receipt's save is parked: the release queues behind it and
+			-- carries the grant too
+			ds:hookNext(function()
+				sched:wait(5)
+			end)
+			local second: string? = nil
+			sched:spawn(function()
+				second = receipts:process(receipt("pur-2"))
+			end)
+			local released: boolean? = nil
+			sched:spawn(function()
+				released = session:release()
+			end)
+			assert(second == nil and released == nil, "both parked")
+			sched:advance(6)
+			assert(second == GRANTED and released == true, `{second} {released}`)
+			assert(records.p1.lease == nil and records.p1.data.receipts["pur-2"] ~= nil)
+			assert(grants == 2 and records.p1.data.wallet.balances.Gems == 200)
 		end,
 	},
 	{
@@ -440,13 +536,18 @@ return {
 				sched:wait(5)
 			end)
 			sched:spawn(function()
-				receipts:process(receipt("pur-2"))
+				table.insert(results, receipts:process(receipt("pur-2")))
 			end)
 			sched:spawn(function()
-				receipts:process(receipt("pur-3"))
+				table.insert(results, receipts:process(receipt("pur-3")))
 			end)
 			sched:advance(6)
+			assert(
+				#results == 4 and results[3] == GRANTED and results[4] == GRANTED,
+				table.concat(results, ",")
+			)
 			assert(grants == 3 and records.p1.data.wallet.balances.Gems == 300)
+			assert(records.p1.data.receipts["pur-2"] ~= nil and records.p1.data.receipts["pur-3"] ~= nil)
 		end,
 	},
 	{
