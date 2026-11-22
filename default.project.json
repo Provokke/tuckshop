@@ -1,0 +1,17 @@
+{
+	"name": "tuckshop",
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"Tuckshop": { "$path": "src/shared" }
+		},
+		"ServerScriptService": {
+			"Tuckshop": { "$path": "src/server" }
+		},
+		"StarterPlayer": {
+			"StarterPlayerScripts": {
+				"Tuckshop": { "$path": "src/client" }
+			}
+		}
+	}
+}

@@ -1,0 +1,13 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: CompeyDev/setup-rokit@v0.2.1
+      - run: rokit install --no-trust-check
+      - run: stylua --check src tests
+      - run: selene src
+      - run: cd tests && selene .
+      - run: lune run tests/run

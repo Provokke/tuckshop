@@ -1,0 +1,5 @@
+std = "luau"
+
+[lints]
+# specs use bare assert(condition); the message-less form is fine in tests
+incorrect_standard_library_use = "allow"
