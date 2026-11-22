@@ -151,25 +151,28 @@ return {
 			local ok, err = shop:purchase(7, w.data, "cape_skin")
 			assert(ok == false and err == "grant_failed", tostring(err))
 			assert(w.data.wallet.balances.Coins == 500 and w.data.bought.cape_skin == nil)
+			assert(w.data.owned.cape_skin == nil)
+			local log = w.data.wallet.log
+			assert(#log == 2 and log[1].delta == -400 and log[2].delta == 400, "a debit, then a refund")
+			assert(log[2].reason == "refund:cape_skin")
 		end,
 	},
 	{
 		name = "the price always comes from the catalogue, never from the caller",
 		run = function()
+			-- purchase takes (self, key, data, itemId) and nothing more: there is no price to pass
+			local params, vararg = debug.info(Shop.purchase, "a")
+			assert(params == 4 and vararg == false, `{params} parameters, vararg {vararg}`)
 			local w = setup(1000)
-			-- purchase has no price parameter; extra arguments are ignored
-			local purchase: any = w.shop.purchase
-			local ok = purchase(w.shop, 7, w.data, "shield_skin", 1)
-			assert(ok == true)
-			assert(w.data.wallet.balances.Coins == 750, "250 was debited, not 1")
-			assert(w.data.wallet.log[1].delta == -250)
-			-- control: the catalogue's price is what moves the charge
+			assert(w.shop:purchase(7, w.data, "shield_skin") == true)
+			assert(w.data.wallet.balances.Coins == 750 and w.data.wallet.log[1].delta == -250)
+			-- control: change the catalogue's price and the charge follows it
 			local pricey = table.clone(catalogue)
 			pricey.shield_skin = { name = "Shield", price = 300, currency = "Coins", pool = "skins" }
 			local w2 = setup(1000)
 			w2.shop.deps.catalogue = pricey
 			assert(w2.shop:purchase(7, w2.data, "shield_skin") == true)
-			assert(w2.data.wallet.balances.Coins == 700)
+			assert(w2.data.wallet.balances.Coins == 700 and w2.data.wallet.log[1].delta == -300)
 		end,
 	},
 	{
