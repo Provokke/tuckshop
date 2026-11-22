@@ -121,6 +121,9 @@ local passes = Passes.new({
 	owns = function(userId: number, passId: number): boolean
 		return MarketplaceService:UserOwnsGamePassAsync(userId, passId)
 	end,
+	wait = function(seconds: number)
+		task.wait(seconds)
+	end,
 })
 
 -- Declared first: `ready` needs handlers, and handlers need sessions.
@@ -267,7 +270,11 @@ end
 MarketplaceService.PromptGamePassPurchaseFinished:Connect(
 	function(player: Player, passId: number, wasPurchased: boolean)
 		if wasPurchased then
+			-- Counted at once, then checked with the server in the background.
 			passes:bought(player.UserId, passId)
+			task.spawn(function()
+				passes:confirm(player.UserId, passId)
+			end)
 		end
 	end
 )

@@ -115,4 +115,50 @@ return {
 			assert(stored(world, 1).owned.tuck_basket == 2 and stored(world, 1).wallet.balances.Coins == 40)
 		end,
 	},
+	{
+		name = "the coin pad pays 10 Coins, and 20 only with a pass the server confirms",
+		run = function()
+			local config = configWithProduct()
+			config.GamePasses = { [77] = { perk = "DoubleCoins" } }
+			local world = FakeGame.new({ config = config })
+			local pad = world:addPad()
+			world:start()
+			world:join(1)
+			local function coins(): number
+				return world.synced[#world.synced].payload.balances.Coins
+			end
+			world:touch(pad, 1)
+			assert(coins() == 110, `{coins()}`)
+			-- a finished-purchase event the server can't confirm doesn't double the pad
+			world:passFinished(1, 77, true)
+			world.sched:advance(3)
+			world:touch(pad, 1)
+			assert(coins() == 120, `{coins()} after an unconfirmed purchase`)
+			-- control: a purchase the server confirms does
+			world.passOwned["1:77"] = true
+			world:passFinished(1, 77, true)
+			world.sched:advance(3)
+			world:touch(pad, 1)
+			assert(coins() == 140, `{coins()} after a confirmed purchase`)
+		end,
+	},
+	{
+		name = "a pass check that fails at join is tried again, so the perk arrives without a rejoin",
+		run = function()
+			local config = configWithProduct()
+			config.GamePasses = { [77] = { perk = "DoubleCoins" } }
+			local world = FakeGame.new({ config = config })
+			local pad = world:addPad()
+			world:start()
+			world.passOwned["1:77"] = "error" -- the service is down as they join
+			world:join(1)
+			world:touch(pad, 1)
+			assert(world.synced[#world.synced].payload.balances.Coins == 110, "not doubled while unknown")
+			world.passOwned["1:77"] = true -- the service is back
+			world.sched:advance(30)
+			world:touch(pad, 1)
+			assert(world.synced[#world.synced].payload.balances.Coins == 130, "doubled after the retry")
+			assert(#world.passChecks == 2, `{#world.passChecks} checks`)
+		end,
+	},
 }
