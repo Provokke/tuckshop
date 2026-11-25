@@ -4,7 +4,7 @@
 
 Currencies, a rotating shop and idempotent developer-product receipts for Roblox. It leaves out item art and any gameplay that uses what a player buys: a bought item is kept as a count in the player's saved data and shown as an attribute on the player. Player data is saved with a session lease, the same store as [satchel](https://github.com/Provokke/satchel).
 
-![Licence](https://img.shields.io/badge/LICENSE-MIT-blue?style=for-the-badge)  ![Language](https://img.shields.io/badge/LUAU-00A2FF?style=for-the-badge&logo=roblox&logoColor=white)  ![Tests](https://img.shields.io/badge/TESTS-156-brightgreen?style=for-the-badge)
+![Licence](https://img.shields.io/badge/LICENSE-MIT-blue?style=for-the-badge)  ![Language](https://img.shields.io/badge/LUAU-00A2FF?style=for-the-badge&logo=roblox&logoColor=white)  ![Tests](https://img.shields.io/badge/TESTS-157-brightgreen?style=for-the-badge)
 
 Refer to [LICENSE](LICENSE) for the legal bits.
 
@@ -99,7 +99,7 @@ In Studio the server uses an in-memory store, so nothing is saved between sessio
 lune run tests/run
 ```
 
-156 tests, all passing:
+157 tests, all passing:
 
 - Rate limiter (4): a full bucket allows exactly its capacity, time refills it, it never overfills, and forgetting a key resets only that key.
 - Validate (10): integers, strings, unit vectors and set membership, including NaN, infinity, floats, wrong types and out-of-range values.
